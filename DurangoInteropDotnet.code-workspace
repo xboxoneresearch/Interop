@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"editor.formatOnSave": true
+	},
+	"extensions": {
+		"recommendations": [
+			"EditorConfig.EditorConfig",
+			"ms-dotnettools.csharp",
+			"esbenp.prettier-vscode"
+		]
+	}
+}
