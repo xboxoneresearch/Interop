@@ -1,0 +1,94 @@
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <UsingTask
+      TaskName="MountCS"
+      TaskFactory="RoslynCodeTaskFactory"
+      AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll" >
+      <ParameterGroup />
+      <Task>
+        <Using Namespace="System"/>
+        <Using Namespace="System.Runtime.InteropServices"/>
+        <Using Namespace="System.Reflection"/>
+        <Code Type="Method" Language="cs">
+  <![CDATA[
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdOpenAdapter(out IntPtr hAdapter);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdCloseAdapter(IntPtr hAdapter);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdMount(out IntPtr hDevice, IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string crdPath, uint mountFlags);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdUnmount(IntPtr hAdapter, IntPtr hDevice);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdUnmountByPath(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string crdPath);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdQueryDevicePath([MarshalAs(UnmanagedType.LPWStr)] out string devicePath, IntPtr hDeviceHandle);
+
+    const string CS_PATH = @"[XTE:]\ConnectedStorage-retail";
+    const string CS_PATH_DEV = @"[XTE:]\ConnectedStorage";
+
+    // For series consoles
+    const string CS_PATH_SERIES = @"[XSS:]\ConnectedStorage-retail";
+    const string CS_PATH_SERIES_DEV = @"[XSS:]\ConnectedStorage";
+
+    public override bool Execute()
+    {
+        // TODO: Enumerate matching path directly by querying for the CRD-Path
+
+        /* NOTE: SET TO CS_PATH_SERIES on Xbox Series S/X */
+        const string containerPath = CS_PATH;
+
+        Console.WriteLine("[+] Opening XCrd adapter");
+        uint result = XCrdOpenAdapter(out IntPtr hAdapter);
+        if (hAdapter == IntPtr.Zero)
+        {
+            throw new Exception($"Failed to open XCRD adapter, code: {result:08x}");
+        }
+
+        result = XCrdUnmountByPath(hAdapter, containerPath);
+        if (result != 0)
+        {
+            Console.WriteLine("[-] Failed to unmount target xvd!");
+            Console.WriteLine($"[-] Result: {result}");
+            return false;
+        }
+        Console.WriteLine("[+] Unmounted successfully");
+
+        result = XCrdMount(out IntPtr hDevice, hAdapter, containerPath, 0);            
+        if (result != 0 || hDevice == IntPtr.Zero)
+        {
+            Console.WriteLine($"[-] Failed to mount target! Result: {result}");
+            return false;
+        }
+
+        result = XCrdQueryDevicePath(out string devicePath, hDevice);
+        if (result != 0)
+        {
+            Console.WriteLine("Failed to read device path! Result: {result}");
+            return false;
+        }
+
+        Console.WriteLine($"[*] XVD Mounted to {devicePath}");
+
+        if (hAdapter != IntPtr.Zero)
+        {
+            XCrdCloseAdapter(hAdapter);
+        }
+        Console.WriteLine("[+] XCRD adapter closed");
+        Console.WriteLine($"[*] Now execute: mklink /j T:\\connectedStorage {devicePath}\\");
+
+        return true;
+    }
+  
+  ]]>
+        </Code>
+      </Task>
+    </UsingTask>
+     <Target Name="Mount">
+      <MountCS />
+    </Target>
+  </Project>

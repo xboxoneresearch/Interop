@@ -1,14 +1,54 @@
 # Durango Interop Dotnet
 
-## Requirements
+This repo serves two purposes
+
+- Full C# classes to interop
+- MSBuild tasks that can be ran via dotnet
+
+
+### Dotnet MSBuild tasks
+
+#### Requirements
+
+- [Dotnet SDK, x64, Windows, zip](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
+
+#### Usage
+
+- Extract dotnet sdk zip to flash drive
+- Copy the tasks to a flash drive
+- Execute them via `dotnet.exe msbuild taskname.xml`
+
+**NOTE**: Some scripts require modifications before being used, f.e. to adjust paths or addresses.
+
+#### Running in background / as another user
+
+As SYSTEM
+
+```
+schtasks /create /f /tn "MySYSTEMBackgroundTask" /ru SYSTEM /sc ONSTART /tr "D:\dotnet\dotnet.exe msbuild D:\msbuild_tasks\taskname.xml"
+schtasks /run /tn "MySYSTEMBackgroundTask"
+```
+
+As DefaultAccount
+
+```
+schtasks /create /f /tn "MyDABackgroundTask" /ru DefaultAccount /sc ONSTART /tr "D:\dotnet\dotnet.exe msbuild D:\msbuild_tasks\taskname.xml"
+schtasks /run /tn "MyDABackgroundTask"
+```
+
+### C# Interop
+
+#### Requirement
 
 - Powershell Core (x64 binaries)
 
-## General
+#### General
 
 Use script `genAio.sh` (Linux) or `genAIO.bat` (Windows) to generate self-contained c# code snippets.
 
 Then, on console in powershell, do `Add-Type -Path filename.cs`
+
+**NOTE**: This currently does not work on 2024 Retail OS exploited consoles.
 
 ## Example usage with powershell
 

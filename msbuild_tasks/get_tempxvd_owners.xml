@@ -1,0 +1,101 @@
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <UsingTask
+      TaskName="GetOwnerIDs"
+      TaskFactory="RoslynCodeTaskFactory"
+      AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll" >
+      <ParameterGroup />
+      <Task>
+        <Using Namespace="System.Text"/>
+        <Using Namespace="System.Runtime.InteropServices"/>
+        <Code Type="Method" Language="cs">
+          <![CDATA[
+
+          // By burninrubber0, X-S Discord
+            [DllImport("advapi32.dll", CharSet = CharSet.Auto)]
+            private static extern int RegOpenKeyEx(
+              UIntPtr hKey,
+              string subKey,
+              int ulOptions,
+              int samDesired,
+              out UIntPtr hkResult);
+            
+            [DllImport("advapi32.dll", EntryPoint = "RegEnumKeyEx")]
+            private static extern int RegEnumKeyEx(
+              UIntPtr hkey,
+              uint index,
+              StringBuilder lpName,
+              ref uint lpcbName,
+              uint reserved,
+              uint lpClass,
+              uint lpcbClass,
+              long lpftLastWriteTime);
+            
+            [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+            private static extern int RegQueryInfoKey(
+              UIntPtr hKey,
+              uint lpClass,
+              uint lpcchClass,
+              uint lpReserved,
+              out uint lpcSubkey,
+              uint lpcchMaxSubkeyLen,
+              uint lpcchMaxClassLen,
+              uint lpcValues,
+              uint lpcchMaxValueNameLen,
+              uint lpcbMaxValueLen,
+              uint lpSecurityDescriptor,
+              uint lpftLastWriteTime);
+            
+            [DllImport("advapi32.dll", CharSet = CharSet.Unicode, EntryPoint = "RegQueryValueExW", SetLastError = true)]
+            private static extern int RegQueryValueEx(
+              UIntPtr hKey,
+              string lpValueName,
+              int lpReserved,
+              uint lpType,
+              StringBuilder lpData,
+              ref uint lpcbData);
+            
+            private static UIntPtr HKLM = new UIntPtr(0x80000002u);
+            private static int KEY_READ = 0x20019;
+            
+            public override bool Execute()
+            {
+              UIntPtr hKey;
+              if (RegOpenKeyEx(HKLM, "OSDATA\\Software\\Microsoft\\Durango\\EraTemporaryXvds", 0, KEY_READ, out hKey) == 0)
+              {
+                uint numXvds;
+                int xvdsInfoResult = RegQueryInfoKey(hKey, 0, 0, 0, out numXvds, 0, 0, 0, 0, 0, 0, 0);
+                Console.WriteLine("Found " + numXvds + " temporary XVDs");
+                for (uint i = 0; i < numXvds; ++i)
+                {
+                  StringBuilder xvdKeyName = new StringBuilder(16);
+                  uint xvdKeyNameLen = 16;
+                  int xvdKeyResult = RegEnumKeyEx(hKey, i, xvdKeyName, ref xvdKeyNameLen, 0, 0, 0, 0);
+                  UIntPtr xvdKey;
+                  if (RegOpenKeyEx(hKey, xvdKeyName.ToString(), 0, KEY_READ, out xvdKey) == 0)
+                  {
+                    StringBuilder ownerName = new StringBuilder(256);
+                    uint ownerNameLen = 256;
+                    if (RegQueryValueEx(xvdKey, "Owner", 0, 0, ownerName, ref ownerNameLen) == 0)
+                    {
+                      Console.WriteLine(xvdKeyName + " is owned by " + ownerName.ToString());
+                      continue;
+                    }
+                    Console.WriteLine("Query failed for XVD key " + i.ToString());
+                    continue;
+                  }
+                  Console.WriteLine("Failed to open XVD key" + xvdKeyName);
+                }
+                Console.WriteLine("Done");
+                return true;
+              }
+              Console.WriteLine("Failed to open EraTemporaryXvds");
+              return false;
+            }
+          ]]>
+        </Code>
+      </Task>
+    </UsingTask>
+    <Target Name="GetOwners">
+      <GetOwnerIDs />
+    </Target>
+  </Project>

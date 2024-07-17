@@ -1,0 +1,529 @@
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <UsingTask
+      TaskName="PrepareGamedump"
+      TaskFactory="RoslynCodeTaskFactory"
+      AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll" >
+      <ParameterGroup />
+      <Task>
+        <Using Namespace="System"/>
+        <Using Namespace="System.IO"/>
+        <Using Namespace="System.Text"/>
+        <Using Namespace="System.Threading"/>
+        <Using Namespace="System.Collections.Generic"/>
+        <Using Namespace="System.Security.Principal"/>
+        <Using Namespace="System.Runtime.CompilerServices"/>
+        <Using Namespace="System.Runtime.InteropServices"/>
+        <Using Namespace="System.Reflection"/>
+        <Code Type="Method" Language="cs">
+          <![CDATA[
+            // Script cobbled together by Yokim, using functions from https://github.com/xboxoneresearch/Interop
+            static readonly IntPtr INVALID_HANDLE_VALUE = new IntPtr(-1);
+            
+            public static class COM
+            {
+                [DllImport("ole32.dll", CharSet = CharSet.Auto, SetLastError = true, CallingConvention = CallingConvention.StdCall)]
+                public static extern int CoInitializeEx([In, Optional] IntPtr pvReserved, [In] uint dwCoInit);
+            
+                [DllImport("combase.dll")]
+                public static extern uint CoCreateInstance(ref Guid clsid, [MarshalAs(UnmanagedType.IUnknown)] object inner, uint context, ref Guid uuid, [MarshalAs(UnmanagedType.IUnknown)] out object rReturnedComObject);
+            
+            
+                public static T ActivateClass<T>(Guid clsid)
+                {
+                    var iid = typeof(T).GUID;
+                    var t = COM.CoCreateInstance(ref clsid, null, 4, ref iid, out object factory);
+                    if (t != 0)
+                    {
+                        throw new Exception($"Failed to activate class {typeof(T)}");
+                    }
+            
+                    return (T)factory;
+                }
+            }
+            
+            public static class WinRT
+            {
+                public enum RO_INIT_TYPE
+                {
+                    RO_INIT_SINGLETHREADED = 0,
+                    RO_INIT_MULTITHREADED = 1,
+                }
+            
+                [DllImport("api-ms-win-core-winrt-l1-1-0.dll", CallingConvention = CallingConvention.StdCall)]
+                public static extern IntPtr RoInitialize(RO_INIT_TYPE initType);
+            
+                [DllImport("api-ms-win-core-winrt-l1-1-0.dll", CallingConvention = CallingConvention.StdCall)]
+                public static extern IntPtr RoUninitialize();
+            
+                [DllImport("api-ms-win-core-winrt-l1-1-0.dll", CallingConvention = CallingConvention.StdCall)]
+                public static extern IntPtr RoGetActivationFactory(IntPtr activatableClassId, byte[] iid, out IntPtr factory);
+            
+                [DllImport("api-ms-win-core-winrt-string-l1-1-0.dll", CallingConvention = CallingConvention.StdCall)]
+                public static extern IntPtr WindowsCreateString([MarshalAs(UnmanagedType.LPWStr)] string sourceString, int length, out IntPtr hstring);
+            
+                [DllImport("api-ms-win-core-winrt-string-l1-1-0.dll", CallingConvention = CallingConvention.StdCall)]
+                public static extern IntPtr WindowsDeleteString(IntPtr hstring);
+            
+                // A helper to read the virtual function pointer from virtual table of the instance.
+                public static T GetVirtualMethodPointer<T>(IntPtr instance, int index)
+                {
+                    var table = Marshal.ReadIntPtr(instance);
+                    var pointer = Marshal.ReadIntPtr(table, index * IntPtr.Size);
+                    return Marshal.GetDelegateForFunctionPointer<T>(pointer);
+                }
+            }
+            
+            public static class Win32
+            {
+                const string KERNELBASE_DLL = "kernelbase.dll";
+                const string KERNEL32_DLL = "kernel32.dll";
+            
+                [Flags]
+                public enum FileAccess : uint
+                {
+                    GENERIC_READ = 0x80000000,
+                    GENERIC_WRITE = 0x40000000,
+                    GENERIC_EXECUTE = 0x20000000,
+                    GENERIC_ALL = 0x10000000
+                }
+            
+                [Flags]
+                public enum FileShare : uint
+                {
+                    FILE_SHARE_READ = 0x00000001,
+                    FILE_SHARE_WRITE = 0x00000002,
+                    FILE_SHARE_DELETE = 0x00000004,
+                }
+            
+                [Flags]
+                public enum FileMode : uint
+                {
+                    CREATE_NEW = 1,
+                    CREATE_ALWAYS = 2,
+                    OPEN_EXISTING = 3,
+                    OPEN_ALWAYS = 4,
+                    TRUNCATE_EXISTING = 5
+                }
+            
+                [Flags]
+                public enum FileAttributes : uint
+                {
+                    NORMAL = 0x00000080,
+                    HIDDEN = 0x00000002,
+                    READONLY = 0x00000001,
+                    ARCHIVE = 0x00000020,
+                    SYSTEM = 0x00000004
+                }
+            
+            
+                [DllImport(KERNEL32_DLL, CharSet = CharSet.Ansi, SetLastError = true)]
+                public static extern IntPtr CreateFileA(
+                        [MarshalAs(UnmanagedType.LPStr)] string filename,
+                        [MarshalAs(UnmanagedType.U4)] FileAccess access,
+                        [MarshalAs(UnmanagedType.U4)] FileShare share,
+                        IntPtr securityAttributes,
+                        [MarshalAs(UnmanagedType.U4)] FileMode creationDisposition,
+                        [MarshalAs(UnmanagedType.U4)] FileAttributes flagsAndAttributes,
+                        IntPtr templateFile);
+            
+                [DllImport(KERNEL32_DLL, SetLastError = true)]
+                public static extern bool ReadFile(IntPtr hFile, [Out] byte[] lpBuffer, uint nNumberOfBytesToRead, out uint lpNumberOfBytesRead, IntPtr lpOverlapped);
+            
+                public static void RawRead(string path)
+                {
+                    IntPtr hFile = CreateFileA(path, Win32.FileAccess.GENERIC_READ, Win32.FileShare.FILE_SHARE_READ | Win32.FileShare.FILE_SHARE_WRITE, IntPtr.Zero, Win32.FileMode.OPEN_EXISTING, 0, IntPtr.Zero);
+                    if (hFile != IntPtr.Zero)
+                    {
+                        if (hFile == INVALID_HANDLE_VALUE)
+                        {
+                            int error = Marshal.GetLastWin32Error();
+                            Console.WriteLine("GetLastError: " + error);
+                        }
+                        Console.WriteLine("[+] Opened handle to: " + path);
+                        Console.WriteLine("[+] Opened handle to: " + hFile.ToString());
+            
+                        uint numBytesRead = 0;
+                        byte[] tmpReadBuffer = new byte[256];
+            
+                        bool hasRead = ReadFile(hFile, tmpReadBuffer, 256, out numBytesRead, IntPtr.Zero);
+                        if (!hasRead)
+                        {
+                            Console.WriteLine("[x] Failed to read target :(");
+                            int error = Marshal.GetLastWin32Error();
+                            Console.WriteLine("GetLastError: " + error);
+                            return;
+                        }
+                        Console.WriteLine("[+] Succesfully read target! Bytes read: " + numBytesRead);
+                    }
+                }
+            }
+            
+            public static class XCrd
+            {
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdOpenAdapter(out IntPtr hAdapter);
+            
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdCloseAdapter(IntPtr hAdapter);
+            
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdMount(out IntPtr hDevice, IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string crdPath, uint mountFlags);
+            
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdUnmount(IntPtr hAdapter, IntPtr hDevice);
+            
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdDeleteXVD(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string crdPath, uint flags);
+            
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdUnmountByPath(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string crdPath);
+            
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdQueryDevicePath([MarshalAs(UnmanagedType.LPWStr)] out string devicePath, IntPtr hDeviceHandle);
+            
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdStreamingStart(
+                    out IntPtr hStreamAdapter,
+                    IntPtr hAdapter,
+                    [MarshalAs(UnmanagedType.LPWStr)] string xcrdSourcePath,
+                    [MarshalAs(UnmanagedType.LPWStr)] string unkPath,
+                    [MarshalAs(UnmanagedType.LPWStr)] string xcrdDestPath,
+                    [MarshalAs(UnmanagedType.LPWStr)] string unkPath2,
+                    [MarshalAs(UnmanagedType.LPWStr)] string unkPath3,
+                    uint SpecifierCount,
+                    IntPtr Specifiers,
+                    uint Flags,
+                    out ulong DstSize,
+                    out IntPtr ErrorSource
+                );
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdStreamingStop(IntPtr hAdapter, IntPtr hInstance, uint flags);
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                public static extern uint XCrdStreamingQueryActiveInstanceId(IntPtr hAdapter, out IntPtr hInstanceId);
+                [DllImport("xcrdapi.dll", PreserveSig = false)]
+                // QueryInformation untested
+                public static extern uint XCrdStreamingQueryInformation(IntPtr info, IntPtr hAdapter, IntPtr hInstance);
+            
+            
+                [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
+                public struct XvdStreamingInfo
+                {
+                    public ulong StreamId;                    // 0x00
+            
+                    ulong Unknown08;                          // 0x08 - UNKNOWN
+            
+                    public ulong StreamedBytes;               // 0x10
+                    public ulong SourceStreamedBytes;         // 0x18
+                    public ulong CacheStreamedBytes;          // 0x20
+                    public ulong UpdateStreamedBytes;         // 0x28
+                    public ulong FallbackStreamedBytes;       // 0x30
+            
+                    ulong Unknown38;                          // 0x38 - UNKNOWN
+            
+                    public ulong DownloadSize;                // 0x40
+                    public ulong StagingSize;                 // 0x48
+                    public ulong BlobSize;                    // 0x50
+                    public ulong ActiveRegion;                // 0x58
+                    public ulong ActiveRegionStreamedBytes;   // 0x60
+                    public ulong RegionCount;                 // 0x68
+                    public ulong StreamedRegionCount;         // 0x70
+                    public uint InitialPlayRegionId;          // 0x78
+                    public uint CacheLastIoStatus;            // 0x7C
+                    public ulong InitialPlayRegionOffset;     // 0x80
+                    public ulong PaddingBytes;                // 0x88
+                    public uint SourceLastIoStatus;           // 0x90
+                    public uint DestinationLastIoStatus;      // 0x94
+                    public uint SourceStreaming;              // 0x98
+                    public uint RegionSpecifierCount;         // 0x9C
+                    public uint StreamingDisc;                // 0xA0
+                    public uint NeededDisc;                   // 0xA4
+                    public ulong SegmentCount;                // 0xA8
+            
+                    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x20)]
+                    byte[] UnknownB0;                         // 0xB0 - MISSING
+            
+                    public ulong XipMissBytes;                // 0xC0
+                    public uint XipMissCount;                 // 0xC8
+                    public uint XipReadAhead;                 // 0xCC
+                    public Guid StreamingPlanId;              // 0xD0
+                    public ulong FsDefragmentedBytes;         // 0xE0
+                    public ulong FsDefragmentedRequiredBytes; // 0xE8
+                    public ulong NandDefragmentedBytes;       // 0xF0
+                    public ulong NandDefragmentRequiredBytes; // 0xF8
+            
+                    [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
+                    public byte[] Reserved;                   // 0x100
+                    /* END 0x110 */
+                }
+            }
+            
+            public class XCrdManager : IDisposable
+            {
+                const int CHUNK_SIZE = 16 * 1024 * 1024; // 16MB
+                readonly IntPtr _adapterHandle;
+            
+                public XCrdManager()
+                {
+                    uint result = XCrd.XCrdOpenAdapter(out IntPtr hAdapter);
+                    if (hAdapter == IntPtr.Zero)
+                    {
+                        throw new Exception($"Failed to open XCRD adapter, code: {result:08x}");
+                    }
+                    _adapterHandle = hAdapter;
+                }
+            
+                public string Mount(string xvdPath)
+                {
+                    uint result = XCrd.XCrdMount(out IntPtr hDevice, _adapterHandle, xvdPath, 0);
+                    if (result != 0 || hDevice == IntPtr.Zero)
+                    {
+                        Console.WriteLine("Failed to mount target! Result: " + result);
+                        return null;
+                    }
+            
+                    result = XCrd.XCrdQueryDevicePath(out string devicePath, hDevice);
+                    if (result != 0)
+                    {
+                        Console.WriteLine("Failed to read device path! Result: " + result);
+                        return null;
+                    }
+            
+                    return devicePath;
+                }
+            
+                /// <summary>
+                /// Unmount an XVD based on XCRD path (host-relevant path)
+                /// </summary>
+                /// <param name="xcrdPath"></param>
+                /// <returns>0 on success</returns>
+                public uint Unmount(string xcrdPath)
+                {
+                    uint result = XCrd.XCrdUnmountByPath(_adapterHandle, xcrdPath);
+                    if (result != 0)
+                    {
+                        Console.WriteLine("[x] Failed to unmount target xvd!");
+                        Console.WriteLine("[x] Result: " + result);
+                        return result;
+                    }
+                    Console.WriteLine("Unmounted successfully");
+                    return 0;
+                }
+            
+                public uint DeleteXVD(string xvdPath)
+                {
+                    uint result = XCrd.XCrdDeleteXVD(_adapterHandle, xvdPath, 0);
+                    if (result != 0)
+                    {
+                        Console.WriteLine("[x] Failed to delete xvd! Result:" + result.ToString());
+                    }
+                    return result;
+                }
+            
+                string StreamingInfoToString(XCrd.XvdStreamingInfo info)
+                {
+                    StringBuilder sb = new();
+                    sb.AppendFormat("Active Region                 = 0x{0:X16}\n", info.ActiveRegion);
+                    sb.AppendFormat("Active Region Streamed Bytes  = 0x{0:X16}\n", info.ActiveRegionStreamedBytes);
+                    sb.AppendFormat("Blob Size                     = 0x{0:X16}\n", info.BlobSize);
+                    sb.AppendFormat("Staging Size                  = 0x{0:X16}\n", info.StagingSize);
+                    sb.AppendFormat("Initial Play Region Id        = 0x{0:X}\n", info.InitialPlayRegionId);
+                    sb.AppendFormat("Initial Play Region Offset    = 0x{0:X16}\n", info.InitialPlayRegionOffset);
+                    sb.AppendFormat("Region Count                  = 0x{0:X16}\n", info.RegionCount);
+                    sb.AppendFormat("Segment Count                 = 0x{0:X16}\n", info.SegmentCount);
+                    sb.AppendFormat("Region Specifier Count        = 0x{0:X}\n", info.RegionSpecifierCount);
+                    sb.AppendFormat("Streamed Region Count         = 0x{0:X16}\n", info.StreamedRegionCount);
+                    sb.AppendFormat("Streamed Bytes                = 0x{0:X16}\n", info.StreamedBytes);
+                    sb.AppendFormat("Source Streamed Bytes         = 0x{0:X16}\n", info.SourceStreamedBytes);
+                    sb.AppendFormat("Cache Streamed Bytes          = 0x{0:X16}\n", info.CacheStreamedBytes);
+                    sb.AppendFormat("Update Streamed Bytes         = 0x{0:X16}\n", info.UpdateStreamedBytes);
+                    sb.AppendFormat("Fallback Streamed Bytes       = 0x{0:X16}\n", info.FallbackStreamedBytes);
+                    sb.AppendFormat("Padding Bytes                 = 0x{0:X16}\n", info.PaddingBytes);
+                    sb.AppendFormat("Stream ID                     = 0x{0:X16}\n", info.StreamId);
+                    sb.AppendFormat("Download Size                 = 0x{0:X16}\n", info.DownloadSize);
+                    sb.AppendFormat("Source Last Io Status         = 0x{0:X}\n", info.SourceLastIoStatus);
+                    sb.AppendFormat("Cache Last Io Status          = 0x{0:X}\n", info.CacheLastIoStatus);
+                    sb.AppendFormat("Destination Last Io Status    = 0x{0:X}\n", info.DestinationLastIoStatus);
+                    sb.AppendFormat("Source Streaming              = {0:X}\n", info.SourceStreaming);
+                    // sb.AppendFormat("Cache Streaming               = {0:X}");
+                    // sb.AppendFormat("Update Streaming              = {0:X}");
+                    // sb.AppendFormat("FS Defragmenting              = {0:X}");
+                    // sb.AppendFormat("NAND Defragmenting            = {0:X}");
+                    sb.AppendFormat("Streaming Disc                = {0:X}\n", info.StreamingDisc);
+                    sb.AppendFormat("Needed Disc                   = {0:X}\n", info.NeededDisc);
+                    sb.AppendFormat("XIP Miss Bytes                = {0:X}\n", info.XipMissBytes);
+                    sb.AppendFormat("XIP Miss Count                = {0:X}\n", info.XipMissCount);
+                    sb.AppendFormat("XIP Read Ahead (s)            = {0:X}\n", info.XipReadAhead);
+                    // sb.AppendFormat("XIP Plan Type                 = {0}");
+                    sb.AppendFormat("Streaming Plan Id             = {0}\n", info.StreamingPlanId);
+                    sb.AppendFormat("FS Defragmented Bytes         = {0:X}\n", info.FsDefragmentedBytes);
+                    sb.AppendFormat("FS Defragment Required Bytes  = {0:X}\n", info.FsDefragmentedRequiredBytes);
+                    sb.AppendFormat("NAND Defragmented Bytes       = {0:X}\n", info.NandDefragmentedBytes);
+                    sb.AppendFormat("NAND Defragment Required Bytes= {0:X}\n", info.NandDefragmentRequiredBytes);
+            
+                    return sb.ToString();
+                }
+            
+                public uint Stream(string srcPath, string dstPath)
+                {
+                    uint result = XCrd.XCrdStreamingStart(
+                        out IntPtr hInstanceId,
+                        _adapterHandle,
+                        srcPath,
+                        null,
+                        dstPath,
+                        null,
+                        null,
+                        0,
+                        IntPtr.Zero,
+                        0,
+                        out ulong dstSize,
+                        out IntPtr errorSource
+                    );
+            
+                    if (result != 0)
+                    {
+                        Console.WriteLine("Starting streaming failed: " + result.ToString());
+                        return result;
+                    }
+                    Console.WriteLine("Streaming handle: 0x{0:X}", hInstanceId);
+            
+                    IntPtr ptrInfoBuf = Marshal.AllocHGlobal(Marshal.SizeOf<XCrd.XvdStreamingInfo>());
+                    if (ptrInfoBuf == IntPtr.Zero)
+                    {
+                        Console.WriteLine("Failed to allocate XvdStreamingInfo buffer");
+                        return 1;
+                    }
+            
+                    while (true)
+                    {
+                        result = XCrd.XCrdStreamingQueryInformation(ptrInfoBuf, _adapterHandle, hInstanceId);
+                        if (result != 0)
+                        {
+                            Console.WriteLine("Failed to query streaming infos: " + result.ToString());
+                            Marshal.FreeHGlobal(ptrInfoBuf);
+                            return result;
+                        }
+            
+                        var streamingInfo = Marshal.PtrToStructure<XCrd.XvdStreamingInfo>(ptrInfoBuf);
+                        Console.WriteLine(":: Streaming Info ::\n{0}", StreamingInfoToString(streamingInfo));
+            
+                        if (streamingInfo.BlobSize == streamingInfo.StreamedBytes)
+                        {
+                            Console.WriteLine("Streaming of {0:X16} bytes finished!", streamingInfo.StreamedBytes);
+                            break;
+                        }
+            
+                        // Wait 5 seconds between queries
+                        Thread.Sleep(1000 * 5);
+                    }
+            
+                    Marshal.FreeHGlobal(ptrInfoBuf);
+            
+                    Console.WriteLine("Stopping streaming");
+                    result = XCrd.XCrdStreamingStop(_adapterHandle, hInstanceId, 0);
+                    if (result != 0)
+                    {
+                        Console.WriteLine("Failed to stop streaming: " + result.ToString());
+                    }
+            
+                    return result;
+                }
+            
+                public void Dispose()
+                {
+                    if (_adapterHandle != IntPtr.Zero)
+                    {
+                        XCrd.XCrdCloseAdapter(_adapterHandle);
+                    }
+                }
+            }
+            
+            [Guid("2769c3a8-d8e3-41ba-b38b-01d05dd2374e")]
+            [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+            public interface IClipLicenseManager
+            {
+                void StoreLicense(string licenseBuffer, uint flags, out IntPtr clipLicense);
+            }
+            
+            public class LicenseManager
+            {
+                static readonly Guid CLSID = new Guid("7e480b22-b679-4542-9b30-d5a52da92ce5");
+                static readonly IClipLicenseManager _manager;
+            
+                static LicenseManager()
+                {
+                    COM.CoInitializeEx(IntPtr.Zero, 0);
+            
+                    _manager = COM.ActivateClass<IClipLicenseManager>(CLSID);
+                }
+            
+                /// <summary>
+                /// Loads a full license (base64 representation of the license.xml)
+                /// </summary>
+                /// <param name="licenseBuffer"></param>
+                /// <returns>true on success, false otherwise</returns>
+                public static bool LoadLicenseBase64(string licenseBuffer)
+                {
+                    _manager.StoreLicense(licenseBuffer, 0x1, out IntPtr license);
+                    return license != IntPtr.Zero;
+                }
+            
+                public static bool LoadLicenseFile(string filePath)
+                {
+                    //
+                    // Read and convert license contents to base64
+                    // Just assume the license is valid, it'll fail anyway if it's not
+                    //
+                    string content = File.ReadAllText(filePath);
+                    if (string.IsNullOrEmpty(content))
+                    {
+                        throw new InvalidDataException("Provided file is empty");
+                    }
+            
+                    var licenseBlob = Encoding.UTF8.GetBytes(content);
+                    var base64Blob = Convert.ToBase64String(licenseBlob);
+                    return LoadLicenseBase64(base64Blob);
+                }
+            }
+
+            /* EDIT ME */
+            
+            const string TEMP_XVD_PATH = @"[XTE:]\temp00"; // Replace with temp<NUM> of exploited game
+            const string SRC_XVC_PATH = @"[XUC:]\PUT-CONTENT-ID-OF-GAME-HERE";
+            const string LICENSE_FILE = @"S:\Clip\PUT-LICENSE-FILE-NAME-HERE";
+            
+            /* EDIT END */
+
+            public override bool Execute()
+            {
+                Console.WriteLine("Start!");
+                
+                var xcrd = new XCrdManager();
+                uint result = 0;
+                
+                result = xcrd.DeleteXVD(TEMP_XVD_PATH);
+                if (result != 0)
+                {
+                      return false;
+                }
+              
+              result = xcrd.Stream(SRC_XVC_PATH, TEMP_XVD_PATH);
+              if (result != 0)
+                      return false;
+              
+              if (!LicenseManager.LoadLicenseFile(LICENSE_FILE))
+                {
+                    Console.WriteLine("[-] Failed to load license file!");
+                    return false;
+                }
+                Console.WriteLine("[+] License file loaded");
+                return true;
+            }
+          ]]>
+        </Code>
+      </Task>
+    </UsingTask>
+    <Target Name="Prepare">
+      <PrepareGamedump />
+    </Target>
+  </Project>
