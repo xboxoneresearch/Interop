@@ -500,11 +500,13 @@
                 
                 var xcrd = new XCrdManager();
                 uint result = 0;
-                
-                result = xcrd.DeleteXVD(TEMP_XVD_PATH);
-                if (result != 0)
-                {
-                      return false;
+
+                try {
+                    result = xcrd.DeleteXVD(TEMP_XVD_PATH);
+                    if (result != 0)
+                        Console.WriteLine($"[-] DeleteXVD failed, result: {result}");
+                } catch (Exception exc) {
+                    Console.WriteLine($"[-] DeleteXVD failed (no worries), exc: {exc}");
                 }
               
               result = xcrd.Stream(SRC_XVC_PATH, TEMP_XVD_PATH);
