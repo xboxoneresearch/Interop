@@ -39,8 +39,7 @@
     {
         // TODO: Enumerate matching path directly by querying for the CRD-Path
 
-        /* NOTE: SET TO CS_PATH_SERIES on Xbox Series S/X */
-        const string containerPath = CS_PATH;
+        string containerPath = CS_PATH_SERIES;
 
         Console.WriteLine("[+] Opening XCrd adapter");
         uint result = XCrdOpenAdapter(out IntPtr hAdapter);
@@ -49,7 +48,14 @@
             throw new Exception($"Failed to open XCRD adapter, code: {result:08x}");
         }
 
-        result = XCrdUnmountByPath(hAdapter, containerPath);
+        try {
+            result = XCrdUnmountByPath(hAdapter, containerPath);
+        } catch (FileNotFoundException) {
+            // Maybe it's Xbox One, try the other path
+            containerPath = CS_PATH;
+            result = XCrdUnmountByPath(hAdapter, containerPath);
+        }
+
         if (result != 0)
         {
             Console.WriteLine("[-] Failed to unmount target xvd!");
