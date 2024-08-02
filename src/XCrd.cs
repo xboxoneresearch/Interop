@@ -22,7 +22,48 @@ public static class XCrd
     public static extern uint XCrdUnmountByPath(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string crdPath);
 
     [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdQueryCrdInformation(IntPtr hAdapter, int xcrdId, int xcrdQueryClass, out IntPtr info, ulong length);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdQueryXvdInformation(IntPtr hAdapter, string crdPath, ulong infoClass, out IntPtr infoBuffer, ulong length);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
     public static extern uint XCrdQueryDevicePath([MarshalAs(UnmanagedType.LPWStr)] out string devicePath, IntPtr hDeviceHandle);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdReadUserDataXVD(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string srcPath, ulong offset, out IntPtr buffer, ref uint length);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdStorageReadBlob(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string srcPath, IntPtr buf, ref uint readSize);
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdStorageWriteBlob(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string dstPath, byte[] buf, uint writeSize);
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdStorageMoveBlob(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string src, [MarshalAs(UnmanagedType.LPWStr)] string dst, uint flags);
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdStorageDeleteBlob(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string path);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdXBlobCreate(
+        IntPtr hAdapter,
+        [MarshalAs(UnmanagedType.LPWStr)] string path,
+        ulong size,
+        uint flags
+    );
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdXBlobCopy(
+        IntPtr hAdapter,
+        [MarshalAs(UnmanagedType.LPWStr)] string srcPath,
+        [MarshalAs(UnmanagedType.LPWStr)] string dstPath,
+        ulong offset,
+        ulong length,
+        uint flags,
+        ref ulong bytesRead
+    );
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdXBlobDelete(
+        IntPtr hAdapter,
+        [MarshalAs(UnmanagedType.LPWStr)] string path
+    );
 
     [DllImport("xcrdapi.dll", PreserveSig = false)]
     public static extern uint XCrdStreamingStart(
@@ -47,6 +88,125 @@ public static class XCrd
     // QueryInformation untested
     public static extern uint XCrdStreamingQueryInformation(IntPtr info, IntPtr hAdapter, IntPtr hInstance);
 
+    public enum XCrdQueryInformationType
+    {
+        XCrdQueryBasicInfo = 0,
+        XCrdQueryXvcKeyIdInfo = 1,
+        XCrdQueryMinSysVer = 2,
+        XCrdQueryBasicInfoHeaderOnly = 3,
+        XCrdQueryPlsInfo = 4,
+        XCrdQueryVersionId = 5,
+        XCrdQueryConsistencyChecked = 6,
+        XCrdQueryXasCounters = 7,
+        XCrdQueryXVCSCounters = 8,
+        XCrdQuerySigningInfo = 9,
+        XCrdQueryUpdateInfo = 10,
+        XCrdQueryBaseXvdCounters = 11,
+        XCrdQueryXvdPointerInfo = 12,
+        XCrdQuerySupportedPlatforms = 17,
+        XCrdSystemQueryXCloudFeatureBits = 18,
+        XCrdQueryXvdLocalPointerInfo = 19
+    }
+
+    public enum XvdType
+    {
+        XvdTypeFixed = 0,
+        XvdTypeDynamic,
+        XvdTypeMax
+    }
+
+    public enum XvdContentType : uint
+    {
+        Data = 0,
+        Title = 1,
+        SystemOS = 2,
+        EraOS = 3,
+        Scratch = 4,
+        ResetData = 5,
+        Application = 6,
+        HostOS = 7,
+        X360STFS = 8,
+        X360FATX = 9,
+        X360GDFX = 0xA,
+        Updater = 0xB,
+        OfflineUpdater = 0xC,
+        Template = 0xD,
+        MteHost = 0xE,
+        MteApp = 0xF,
+        MteTitle = 0x10,
+        MteEraOS = 0x11,
+        EraTools = 0x12,
+        SystemTools = 0x13,
+        SystemAux = 0x14,
+        AcousticModel = 0x15,
+        SystemCodecsVolume = 0x16,
+        QasltPackage = 0x17,
+        AppDlc = 0x18,
+        TitleDlc = 0x19,
+        UniversalDlc = 0x1A,
+        SystemDataVolume = 0x1B,
+        TestVolume = 0x1C,
+        HardwareTestVolume = 0x1D,
+        KioskContent = 0x1E,
+        HostProfiler = 0x20,
+        Uwa = 0x21,
+        Unknown22 = 0x22,
+        Unknown23 = 0x23,
+        Unknown24 = 0x24,
+        ServerAgent = 0x25
+    }
+
+    public enum XvdVolumeFlags : uint
+    {
+        ReadOnly = 1,
+        EncryptionDisabled = 2, // data decrypted, no encrypted CIKs
+        DataIntegrityDisabled = 4, // unsigned and unhashed
+        LegacySectorSize = 8,
+        ResiliencyEnabled = 0x10,
+        SraReadOnly = 0x20,
+        RegionIdInXts = 0x40,
+        EraSpecific = 0x80
+    }
+
+    public enum StreamingSource : uint
+    {
+        Cache,
+        Update,
+        FsDefragmenting,
+        NandDefragmenting
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
+    public struct XCrdXvdBasicInfo
+    {
+        public ushort FormatVersion;
+        public byte SupportedPlatforms;
+        public byte Unknown;
+        public XvdType Type;
+        public XvdContentType ContentType;
+        public XvdVolumeFlags Flags;
+        public ulong CreationTime;
+        public ulong DriveSize;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
+        public byte[] VDUID;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
+        public byte[] UVUID;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
+        public byte[] PDUID;
+
+        public ulong PackageVersion;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
+        public char[] SandboxId;
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
+        public byte[] ProductId;
+
+        public ulong BlobSize;
+    }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
     public struct XvdStreamingInfo
@@ -162,6 +322,18 @@ public class XCrdManager : IDisposable
         return result;
     }
 
+    public IntPtr QueryXvdInfo(string xvdPath)
+    {
+        uint result = XCrd.XCrdQueryXvdInformation(_adapterHandle, xvdPath, 0, out IntPtr infoBuffer, 128);
+        if (result != 0)
+        {
+            Console.WriteLine("Failed to query xvd info: " + result.ToString());
+            return IntPtr.Zero;
+        }
+
+        return infoBuffer;
+    }
+
     string StreamingInfoToString(XCrd.XvdStreamingInfo info)
     {
         StringBuilder sb = new();
@@ -269,6 +441,91 @@ public class XCrdManager : IDisposable
             Console.WriteLine("Failed to stop streaming: " + result.ToString());
         }
 
+        return result;
+    }
+
+    public uint GetBlobSize(string srcHostPath)
+    {
+        uint fileSize = 0;
+        // Get filesize
+        uint result = XCrd.XCrdStorageReadBlob(_adapterHandle, srcHostPath, IntPtr.Zero, ref fileSize);
+        if (result != 0)
+        {
+            Console.WriteLine("Failed to enumerate filesize: " + result.ToString());
+            return 0;
+        }
+        return fileSize;
+    }
+
+    public uint ReadBlob(string srcHostPath, string dstPath)
+    {
+        // Get filesize
+        uint fileSize = GetBlobSize(srcHostPath);
+        if (fileSize != 0)
+        {
+            Console.WriteLine("Failed to enumerate filesize for {0}", srcHostPath);
+            return 1;
+        }
+
+        Console.WriteLine("FileSize: 0x{0:X} ({0})", fileSize);
+        IntPtr buf = Marshal.AllocHGlobal((int)fileSize);
+        if (buf == IntPtr.Zero)
+        {
+            Console.WriteLine("Failed to allocate buffer");
+            return 1;
+        }
+
+        uint result = XCrd.XCrdStorageReadBlob(_adapterHandle, srcHostPath, buf, ref fileSize);
+        if (result != 0)
+        {
+            Console.WriteLine("Failed to read blob: " + result.ToString());
+            Marshal.FreeHGlobal(buf);
+            return result;
+        }
+
+        uint position = 0;
+        byte[] chunkBuffer = new byte[CHUNK_SIZE];
+        using var outFile = File.Open(dstPath, FileMode.Create);
+        while (position < fileSize)
+        {
+            uint numBytes = Math.Min(CHUNK_SIZE, fileSize - position);
+            Marshal.Copy(buf + new nint(position), chunkBuffer, 0, (int)numBytes);
+            outFile.Write(chunkBuffer, 0, (int)numBytes);
+            position += numBytes;
+        }
+
+        Marshal.FreeHGlobal(buf);
+        return 0;
+    }
+
+    public uint WriteBlob(string dstHostPath, byte[] data)
+    {
+        uint result = XCrd.XCrdStorageWriteBlob(_adapterHandle, dstHostPath, data, (uint)data.Length);
+        if (result != 0)
+        {
+            Console.WriteLine("Failed to write blob: " + result.ToString());
+        }
+
+        return result;
+    }
+
+    public uint MoveBlob(string srcPath, string dstPath)
+    {
+        uint result = XCrd.XCrdStorageMoveBlob(_adapterHandle, srcPath, dstPath, 0);
+        if (result != 0)
+        {
+            Console.WriteLine("Moving blob failed: " + result.ToString());
+        }
+        return result;
+    }
+
+    public uint DeleteBlob(string filePath)
+    {
+        uint result = XCrd.XCrdStorageDeleteBlob(_adapterHandle, filePath);
+        if (result != 0)
+        {
+            Console.WriteLine("Deleting blob failed: " + result.ToString());
+        }
         return result;
     }
 
