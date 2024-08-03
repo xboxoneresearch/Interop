@@ -254,7 +254,7 @@ public static class XCrd
         public uint XCrdId;        // 0x38
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
-        public byte Unknown1;     // 0x40
+        public byte[] Unknown1;     // 0x40
         public ulong CreationTime; // 0x50
 
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x18)]
