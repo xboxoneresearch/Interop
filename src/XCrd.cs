@@ -66,6 +66,23 @@ public static class XCrd
     );
 
     [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdFindFirstBlob(
+            IntPtr hEnum,
+            IntPtr data,
+            uint xcrdId,
+            [MarshalAs(UnmanagedType.LPWStr)] string path,
+            ulong flags
+    );
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdFindNextBlob(
+        IntPtr hEnum, IntPtr data
+    );
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
+    public static extern uint XCrdFindCloseBlob(IntPtr hEnum);
+
+    [DllImport("xcrdapi.dll", PreserveSig = false)]
     public static extern uint XCrdStreamingStart(
         out IntPtr hStreamAdapter,
         IntPtr hAdapter,
@@ -87,6 +104,14 @@ public static class XCrd
     [DllImport("xcrdapi.dll", PreserveSig = false)]
     // QueryInformation untested
     public static extern uint XCrdStreamingQueryInformation(IntPtr info, IntPtr hAdapter, IntPtr hInstance);
+
+    [Flags]
+    public enum XCrdAttributes : uint
+    {
+        DetectBufferAvailable = 1,
+        Directory = 2,
+        DosPathAvailable = 4
+    }
 
     public enum XCrdQueryInformationType
     {
@@ -209,6 +234,36 @@ public static class XCrd
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
+    public struct XCrdBuffer
+    {
+        public uint Length;   // 0x00
+        public uint Type;     // 0x04
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
+    public struct XCrdInfo
+    {
+        public IntPtr Path;        // 0x00
+        public ulong Size;         // 0x08
+        public XCrdAttributes Attributes; // 0x0c
+        public IntPtr DosPath;     // 0x10
+        public ulong DosPathLen;   // 0x18
+        public IntPtr CrdPath;     // 0x20
+        public ulong CrdPathLen;   // 0x28
+        public ulong Buffer;       // 0x30
+        public uint XCrdId;        // 0x38
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
+        public byte Unknown1;     // 0x40
+        public ulong CreationTime; // 0x50
+
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x18)]
+        public byte[] Unknown2;    // 0x58
+        public uint DetectHr;      // 0x70
+    }
+
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
     public struct XvdStreamingInfo
     {
         public ulong StreamId;                    // 0x00
@@ -258,6 +313,46 @@ public static class XCrd
         public byte[] Reserved;                   // 0x100
         /* END 0x110 */
     }
+
+    public static readonly string[] XcrdIdMapping = new string[]{
+        "[XTE:]",
+        "[XUC:]",
+        "[XSS:]",
+        "[XSU:]",
+        null,
+        "[XFG:]",
+        null,
+        "[XTF:]",
+        "[XBL:]",
+        "[XOD:]",
+        "[XVE:]",
+        "[XT0:]",
+        "[XT1:]",
+        "[XT2:]",
+        "[XT3:]",
+        "[XT4:]",
+        "[XT5:]",
+        "[XT6:]",
+        "[XT7:]",
+        "[XE0:]",
+        "[XE1:]",
+        "[XE2:]",
+        "[XE3:]",
+        "[XE4:]",
+        "[XE5:]",
+        "[XE6:]",
+        "[XE7:]",
+        "[XBX:]",
+        "[XSR:]",
+        null,
+        "[XAS:]",
+        "[XRT:]",
+        "[XRU:]",
+        "[XRS:]",
+        "[XRI:]",
+        null,
+        "[XCC:]"
+    };
 }
 
 public class XCrdManager : IDisposable
@@ -332,6 +427,73 @@ public class XCrdManager : IDisposable
         }
 
         return infoBuffer;
+    }
+
+    public uint EnumBlobs(uint xcrdId, string path, ulong flags)
+    {
+        uint ret;
+        if (xcrdId >= 0x25) {
+            return 0x80070057;
+        }
+
+        var xcrdName = XCrd.XcrdIdMapping[xcrdId];
+
+        Console.WriteLine($"Enumerating blob at {xcrdName}/{path}");
+
+        if (path == "*") {
+            path = null;
+        }
+
+        IntPtr hEnum = IntPtr.Zero;
+        IntPtr pInfoBuffer = Marshal.AllocHGlobal(Marshal.SizeOf<XCrd.XCrdInfo>());;
+
+        ret = XCrd.XCrdFindFirstBlob(hEnum, pInfoBuffer ,xcrdId, path, flags);
+        if (ret < 0) {
+            Console.WriteLine("Failed to find first blob: 0x{ret:X}");
+            return ret;
+        }
+
+        while (ret != 0x80070012) {
+            var info = Marshal.PtrToStructure<XCrd.XCrdInfo>(pInfoBuffer);
+            XcrdInfoToString(info);
+            ret = XCrd.XCrdFindNextBlob(hEnum, pInfoBuffer);
+        }
+
+        XCrd.XCrdFindCloseBlob(hEnum);
+        return ret;
+    }
+
+    string XcrdInfoToString(XCrd.XCrdInfo info)
+    {
+        StringBuilder sb = new();
+        sb.AppendLine("--------------------------------------");
+        sb.AppendFormat("{}\n", info.Path);
+        sb.AppendFormat("Attributes ({0:X08}) :\n", info.Attributes);
+        if (info.Attributes.HasFlag(XCrd.XCrdAttributes.DetectBufferAvailable)) {
+            sb.AppendLine("- DetectBufferAvailable"); 
+        }
+        if (info.Attributes.HasFlag(XCrd.XCrdAttributes.Directory)) {
+            sb.AppendLine("- Directory"); 
+        }
+        if (info.Attributes.HasFlag(XCrd.XCrdAttributes.DosPathAvailable)) {
+            sb.AppendLine("- DosPathAvailable"); 
+        }
+        sb.AppendFormat("Size: {0:X}\n", info.Size);
+        sb.AppendFormat("Crd ID: {0} (0x{0:X})\n", info.XCrdId);
+        sb.AppendFormat("Crd Path: {0} {1}\n", info.CrdPath, info.CrdPathLen);
+        if (info.Attributes.HasFlag(XCrd.XCrdAttributes.DosPathAvailable))
+        {
+            sb.AppendLine("DOS Path: <Not available> (0)");
+        }
+        else
+        {
+            sb.AppendFormat("DOS Path: {0} ({1})\n", info.DosPath, info.DosPathLen);
+        }
+        sb.AppendFormat("Creation Time: {0}\n", info.CreationTime);
+        sb.AppendFormat("Detect HR: 0x{0:X}\n", info.DetectHr);
+        sb.AppendLine("--------------------------------------");
+
+        return sb.ToString();
     }
 
     string StreamingInfoToString(XCrd.XvdStreamingInfo info)
