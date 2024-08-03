@@ -110,10 +110,10 @@ public static class Win32
 
     public static void RawRead(string path)
     {
-        IntPtr hFile = CreateFileA(path, Win32.FileAccess.GENERIC_READ, Win32.FileShare.FILE_SHARE_READ | Win32.FileShare.FILE_SHARE_WRITE, 0, Win32.FileMode.OPEN_EXISTING, 0, 0);
+        IntPtr hFile = CreateFileA(path, Win32.FileAccess.GENERIC_READ, Win32.FileShare.FILE_SHARE_READ | Win32.FileShare.FILE_SHARE_WRITE, IntPtr.Zero, Win32.FileMode.OPEN_EXISTING, 0, IntPtr.Zero);
         if (hFile != IntPtr.Zero)
         {
-            if (hFile == -1)
+            if (hFile == (IntPtr.Zero - 1))
             {
                 int error = Marshal.GetLastWin32Error();
                 Console.WriteLine("GetLastError: " + error);
@@ -124,7 +124,7 @@ public static class Win32
             uint numBytesRead = 0;
             byte[] tmpReadBuffer = new byte[256];
 
-            bool hasRead = ReadFile(hFile, tmpReadBuffer, 256, out numBytesRead, 0);
+            bool hasRead = ReadFile(hFile, tmpReadBuffer, 256, out numBytesRead, IntPtr.Zero);
             if (!hasRead)
             {
                 Console.WriteLine("[x] Failed to read target :(");

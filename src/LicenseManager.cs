@@ -12,7 +12,7 @@ public class LicenseManager
 
     static LicenseManager()
     {
-        COM.CoInitializeEx(0, 0);
+        COM.CoInitializeEx(IntPtr.Zero, 0);
 
         _manager = COM.ActivateClass<IClipLicenseManager>(CLSID);
     }

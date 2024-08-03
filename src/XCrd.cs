@@ -651,7 +651,7 @@ public class XCrdManager : IDisposable
         while (position < fileSize)
         {
             uint numBytes = Math.Min(CHUNK_SIZE, fileSize - position);
-            Marshal.Copy(buf + new nint(position), chunkBuffer, 0, (int)numBytes);
+            Marshal.Copy(IntPtr.Add(buf, (int)position), chunkBuffer, 0, (int)numBytes);
             outFile.Write(chunkBuffer, 0, (int)numBytes);
             position += numBytes;
         }
