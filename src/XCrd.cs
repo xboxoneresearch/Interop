@@ -241,25 +241,24 @@ public static class XCrd
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
+    public struct Utf16StringPtr
+    {
+        public uint StringPtr; // 0x00
+        public uint StringLen; // 0x04
+    }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
     public struct XCrdInfo
     {
-        public IntPtr Path;        // 0x00
-        public ulong Size;         // 0x08
-        public XCrdAttributes Attributes; // 0x0c
-        public IntPtr DosPath;     // 0x10
-        public ulong DosPathLen;   // 0x18
-        public IntPtr CrdPath;     // 0x20
-        public ulong CrdPathLen;   // 0x28
-        public ulong Buffer;       // 0x30
-        public uint XCrdId;        // 0x38
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x10)]
-        public byte[] Unknown1;     // 0x40
-        public ulong CreationTime; // 0x50
-
-        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 0x18)]
-        public byte[] Unknown2;    // 0x58
-        public uint DetectHr;      // 0x70
+        // Skipping \\ prefix of filename
+        public Utf16StringPtr Filename;      // 0x00
+        public Utf16StringPtr DosPath;       // 0x08
+        public Utf16StringPtr CrdPath;       // 0x10
+        public IntPtr Buffer;             // 0x18
+        public ulong Size;                // 0x20
+        public ulong CreationTime;        // 0x28
+        public XCrdAttributes Attributes; // 0x30
+        /* END 0x34 */
     }
 
 
@@ -444,28 +443,40 @@ public class XCrdManager : IDisposable
             path = null;
         }
 
-        IntPtr pInfoBuffer = Marshal.AllocHGlobal(Marshal.SizeOf<XCrd.XCrdInfo>());
+        IntPtr pInfoBuffer = Marshal.AllocHGlobal(0x200);
         ret = XCrd.XCrdFindFirstBlob(out IntPtr hEnum, ref pInfoBuffer, xcrdId, path, flags);
         if (ret < 0) {
             Console.WriteLine("Failed to find first blob: 0x{ret:X}");
             return ret;
         }
 
-        while (ret != 0x80070012) {
-            var info = Marshal.PtrToStructure<XCrd.XCrdInfo>(pInfoBuffer);
-            Console.WriteLine(XcrdInfoToString(info));
+        int pos = 0;
+        do {
+            Console.WriteLine("--- Entry {0} ---", pos);
+            Console.WriteLine(XcrdInfoToString(pInfoBuffer));
             ret = XCrd.XCrdFindNextBlob(hEnum, ref pInfoBuffer);
-        }
+            pos++;
+        } while (ret != 0x80070012);
 
         XCrd.XCrdFindCloseBlob(hEnum);
         return ret;
     }
 
-    string XcrdInfoToString(XCrd.XCrdInfo info)
+    string ReadUnicodeString(IntPtr ptr, uint offset, uint len)
     {
+        byte[] buffer = new byte[len];
+        GCHandle pinnedArray = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+        IntPtr ptrToBuffer = pinnedArray.AddrOfPinnedObject();
+        Marshal.Copy(IntPtr.Add(ptr, (int)offset), buffer, 0, (int)len);
+        return Encoding.Unicode.GetString(buffer);
+    }
+
+    string XcrdInfoToString(IntPtr ptrInfo)
+    {
+        var info = Marshal.PtrToStructure<XCrd.XCrdInfo>(ptrInfo);
+
         StringBuilder sb = new();
-        sb.AppendLine("--------------------------------------");
-        sb.AppendFormat("{0}\n", info.Path);
+        sb.AppendFormat("{0}\n", ReadUnicodeString(ptrInfo, info.Filename.StringPtr, info.Filename.StringLen));
         sb.AppendFormat("Attributes ({0:X}) :\n", info.Attributes);
         if (info.Attributes.HasFlag(XCrd.XCrdAttributes.DetectBufferAvailable)) {
             sb.AppendLine("- DetectBufferAvailable"); 
@@ -477,18 +488,18 @@ public class XCrdManager : IDisposable
             sb.AppendLine("- DosPathAvailable"); 
         }
         sb.AppendFormat("Size: {0:X}\n", info.Size);
-        sb.AppendFormat("Crd ID: {0} (0x{0:X})\n", info.XCrdId);
-        sb.AppendFormat("Crd Path: {0} {1}\n", info.CrdPath, info.CrdPathLen);
+        //sb.AppendFormat("Crd ID: {0} (0x{0:X})\n", info.XCrdId);
+        sb.AppendFormat("Crd Path: {0}\n", ReadUnicodeString(ptrInfo, info.CrdPath.StringPtr, info.CrdPath.StringLen));
         if (info.Attributes.HasFlag(XCrd.XCrdAttributes.DosPathAvailable))
         {
             sb.AppendLine("DOS Path: <Not available> (0)");
         }
         else
         {
-            sb.AppendFormat("DOS Path: {0} ({1})\n", info.DosPath, info.DosPathLen);
+            sb.AppendFormat("DOS Path: {0}\n", ReadUnicodeString(ptrInfo, info.DosPath.StringPtr, info.DosPath.StringLen));
         }
         sb.AppendFormat("Creation Time: {0}\n", info.CreationTime);
-        sb.AppendFormat("Detect HR: 0x{0:X}\n", info.DetectHr);
+        //sb.AppendFormat("Detect HR: 0x{0:X}\n", info.DetectHr);
         sb.AppendLine("--------------------------------------");
 
         return sb.ToString();
