@@ -67,16 +67,16 @@ public static class XCrd
 
     [DllImport("xcrdapi.dll", PreserveSig = false)]
     public static extern uint XCrdFindFirstBlob(
-            IntPtr hEnum,
-            IntPtr data,
+            out IntPtr hEnum,
+            ref IntPtr data,
             uint xcrdId,
             [MarshalAs(UnmanagedType.LPWStr)] string path,
-            ulong flags
+            uint flags
     );
 
     [DllImport("xcrdapi.dll", PreserveSig = false)]
     public static extern uint XCrdFindNextBlob(
-        IntPtr hEnum, IntPtr data
+        IntPtr hEnum, ref IntPtr data
     );
 
     [DllImport("xcrdapi.dll", PreserveSig = false)]
@@ -429,7 +429,7 @@ public class XCrdManager : IDisposable
         return infoBuffer;
     }
 
-    public uint EnumBlobs(uint xcrdId, string path, ulong flags)
+    public uint EnumBlobs(uint xcrdId, string path, uint flags)
     {
         uint ret;
         if (xcrdId >= 0x25) {
@@ -444,10 +444,8 @@ public class XCrdManager : IDisposable
             path = null;
         }
 
-        IntPtr hEnum = IntPtr.Zero;
-        IntPtr pInfoBuffer = Marshal.AllocHGlobal(Marshal.SizeOf<XCrd.XCrdInfo>());;
-
-        ret = XCrd.XCrdFindFirstBlob(hEnum, pInfoBuffer ,xcrdId, path, flags);
+        IntPtr pInfoBuffer = Marshal.AllocHGlobal(Marshal.SizeOf<XCrd.XCrdInfo>());
+        ret = XCrd.XCrdFindFirstBlob(out IntPtr hEnum, ref pInfoBuffer, xcrdId, path, flags);
         if (ret < 0) {
             Console.WriteLine("Failed to find first blob: 0x{ret:X}");
             return ret;
@@ -455,8 +453,8 @@ public class XCrdManager : IDisposable
 
         while (ret != 0x80070012) {
             var info = Marshal.PtrToStructure<XCrd.XCrdInfo>(pInfoBuffer);
-            XcrdInfoToString(info);
-            ret = XCrd.XCrdFindNextBlob(hEnum, pInfoBuffer);
+            Console.WriteLine(XcrdInfoToString(info));
+            ret = XCrd.XCrdFindNextBlob(hEnum, ref pInfoBuffer);
         }
 
         XCrd.XCrdFindCloseBlob(hEnum);
@@ -467,8 +465,8 @@ public class XCrdManager : IDisposable
     {
         StringBuilder sb = new();
         sb.AppendLine("--------------------------------------");
-        sb.AppendFormat("{}\n", info.Path);
-        sb.AppendFormat("Attributes ({0:X08}) :\n", info.Attributes);
+        sb.AppendFormat("{0}\n", info.Path);
+        sb.AppendFormat("Attributes ({0:X}) :\n", info.Attributes);
         if (info.Attributes.HasFlag(XCrd.XCrdAttributes.DetectBufferAvailable)) {
             sb.AppendLine("- DetectBufferAvailable"); 
         }
