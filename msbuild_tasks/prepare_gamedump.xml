@@ -505,15 +505,15 @@
                     result = xcrd.DeleteXVD(TEMP_XVD_PATH);
                     if (result != 0)
                         Console.WriteLine($"[-] DeleteXVD failed, result: {result}");
-                } catch (Exception exc) {
-                    Console.WriteLine($"[-] DeleteXVD failed (no worries), exc: {exc}");
+                } catch (System.IO.FileNotFoundException) {
+                    Console.WriteLine($"[-] DeleteXVD failed, File was probably already deleted (no worries!)");
                 }
               
-              result = xcrd.Stream(SRC_XVC_PATH, TEMP_XVD_PATH);
-              if (result != 0)
+                result = xcrd.Stream(SRC_XVC_PATH, TEMP_XVD_PATH);
+                if (result != 0)
                       return false;
               
-              if (!LicenseManager.LoadLicenseFile(LICENSE_FILE))
+                if (!LicenseManager.LoadLicenseFile(LICENSE_FILE))
                 {
                     Console.WriteLine("[-] Failed to load license file!");
                     return false;
