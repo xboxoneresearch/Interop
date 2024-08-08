@@ -67,6 +67,13 @@ $xcrd.Mount("[XTE:]\ConnectedStorage-retail")
 cmd /c mklink /j T:\connectedStorage "\\?\GLOBALROOT\Device\Harddisk15\Partition1\"
 ```
 
+XcrdUtil
+```
+#Powershell
+import-module xcrdutil.psm1
+xcrdutil -m [XUC:]\connectedStorage-retail
+```
+
 License
 
 ```powershell
