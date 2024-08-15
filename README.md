@@ -42,15 +42,23 @@ schtasks /run /tn "MyDABackgroundTask"
 
 - Powershell Core (x64 binaries)
 
+OR
+
+- [SharpShell](https://github.com/xboxoneresearch/SharpShell)
+
 #### General
 
 Use script `genAio.sh` (Linux) or `genAIO.bat` (Windows) to generate self-contained c# code snippets.
 
 Then, on console in powershell, do `Add-Type -Path filename.cs`
 
-**NOTE**: This currently does not work on 2024 Retail OS exploited consoles.
+~~NOTE: This currently does not work on 2024 Retail OS exploited consoles.~~
+
+For OS ~2024 use SharpShell, linked above!
 
 ## Example usage with powershell
+
+Important: Do the "compiling" genAio step first, to yield the standalone/ready to use *.cs files!
 
 XCrdAPi
 
