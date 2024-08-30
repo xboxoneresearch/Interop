@@ -15,20 +15,21 @@ public static class XCrd
     [DllImport("xcrdapi.dll", PreserveSig = false)]
     public static extern uint XCrdUnmount(IntPtr hAdapter, IntPtr hDevice);
 
+    // 1 page == 0x1000 (4k)
     [DllImport("xcrdapi.dll", PreserveSig = false)]
     public static extern uint XCrdCreateXVD(
         IntPtr hAdapter,
         [MarshalAs(UnmanagedType.LPWStr)] string crdPath,
         Guid someId,
         XvdCreateFlags createFlags,
-        ulong driveSectors,
+        ulong drivePages,
         XvdType xvdType,
         XvdContentType xvdContentType,
         out Guid outputGuid,
         Guid productId,
         string sandboxId,
         uint sandboxLen,
-        [MarshalAs(UnmanagedType.LPWStr)] string someString
+        [MarshalAs(UnmanagedType.LPWStr)] string templateXvd
     );
 
     [DllImport("xcrdapi.dll", PreserveSig = false)]
@@ -219,17 +220,24 @@ public static class XCrd
 
     public enum XvdCreateFlags: ulong
     {
-        DataIntegrityDisabled = 1,
-        EncryptionDisabled = 2,
-        ReadOnly = 4,
-        LegacySectorSize = 0x20,
+        EncryptionEnabled = 1,
+        DataIntegrityEnabled = 2,
+        // Unsure about this, could be read-only
+        Unknown = 4,
+        NativePaths = 0x20,
         ResiliencyEnabled = 0x40,
-        RegionIdInXts = 0x100,
-        TitleSpecific = 0x1000,
-        Reserved0 = 0x10000,         // old TrimSupported
-        TrimSupported = 0x20000,
-        RoamingEnabled = 0x100000,
-        Unknown8000 = 0x200000,
+        TitleSpecific = 0x100,
+        SraReadOnly = 0x200,
+        EphemeralKey = 0x10_000,
+        StreamingRoamableEnabled = 0x20_000,
+        TrimEnabled = 0x100_000,
+        RoamingEnabled = 0x200_000,
+        EphemeralKeyShared = 0x400_000,
+
+        // ACL
+        ACL_APPCONTAINER = 0x80,
+        ACL_SYSTEM = 0x1_000,
+        ACL_WER = 0x1_080
     }
 
     public enum StreamingSource : uint
@@ -445,9 +453,10 @@ public class XCrdManager : IDisposable
         return 0;
     }
 
-    public uint CreateXVD(string crdPath, Guid someId, XCrd.XvdCreateFlags createFlags, ulong driveSectors, XCrd.XvdType xvdType, XCrd.XvdContentType contentType, out Guid outputGuid, Guid productId, string sandboxId)
+    // 1 page = 0x1000 (4k)
+    public uint CreateXVD(string crdPath, Guid someId, XCrd.XvdCreateFlags createFlags, ulong drivePages, XCrd.XvdType xvdType, XCrd.XvdContentType contentType, out Guid outputGuid, Guid productId, string sandboxId)
     {
-        uint result = XCrd.XCrdCreateXVD(_adapterHandle, crdPath, someId, createFlags, driveSectors, xvdType, contentType, out outputGuid, productId, sandboxId, (uint)sandboxId.Length, null);
+        uint result = XCrd.XCrdCreateXVD(_adapterHandle, crdPath, someId, createFlags, drivePages, xvdType, contentType, out outputGuid, productId, sandboxId, (uint)sandboxId.Length, null);
         if (result != 0)
         {
             Console.WriteLine("[x] Failed to create xvd! Result:" + result.ToString());
