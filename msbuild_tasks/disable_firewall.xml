@@ -1,0 +1,35 @@
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<UsingTask
+		TaskName="InvokeCommandTask"
+		TaskFactory="RoslynCodeTaskFactory"
+		AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll" >
+		<Task>
+			<Using Namespace="System" />
+			<Using Namespace="System.IO" />
+			<Using Namespace="System.Reflection"/>
+			<Code Type="Fragment" Language="cs">
+				<![CDATA[
+				Console.Write("Disabling firewall and opening up SSH/Debug ports ... ");
+
+			    var dll = File.ReadAllBytes(@"D:\XBOX\payloads\DurangoInteropDotnet.dll");				
+			    var loader = Assembly.Load(dll);
+			    var manager = loader.GetType("DurangoInteropDotnet.FirewallManager")!;
+
+			    var disableFirewalls = manager.GetMethod("DisableFirewalls", BindingFlags.Static | BindingFlags.Public)!;
+				disableFirewalls.Invoke(null, []);
+
+			    var allowPortThroughFirewall = manager.GetMethod("AllowPortThroughFirewall", BindingFlags.Static | BindingFlags.Public)!;
+			    allowPortThroughFirewall.Invoke(null, ["SSH", (ushort) 22]);
+			    allowPortThroughFirewall.Invoke(null, ["Debugger", (ushort) 23946]);
+				
+				Console.WriteLine("done.");
+  ]]>
+			</Code>
+		</Task>
+	</UsingTask>
+
+	<Target Name="EntryTarget">
+		<InvokeCommandTask/>
+	</Target>
+
+</Project>
