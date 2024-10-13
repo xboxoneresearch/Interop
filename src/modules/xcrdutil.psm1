@@ -8,6 +8,7 @@ Operations & parameters:
     -um <xvd file> - unmounts a xvd drive for the specified xvd file
     -del <xvd file> - deletes a xvd file using a XCRD path
     -enum <xcrd_id> <enum_rel_path> <flags> - enumerate blobs. path = * - enum root; flags = 1 - detect blob.
+    -read_ud <xvd file> <offset> <length> <destination file>
 
     XCRD ID List:
     HDD Temp              : 0
@@ -56,6 +57,30 @@ function xcrdutil {
 
         [Parameter(ParameterSetName="Enum", Position=3)]
         [string]$flags
+
+        [Parameter(ParameterSetName="ReadUserdata")]
+        [switch]$read_ud,
+
+        [Parameter(ParameterSetName="ReadUserdata", Position=1)]
+        [string]$read_ud_src,
+
+        [Parameter(ParameterSetName="ReadUserdata", Position=2)]
+        [string]$read_ud_offset,
+
+        [Parameter(ParameterSetName="ReadUserdata", Position=3)]
+        [string]$read_ud_length,
+
+        [Parameter(ParameterSetName="ReadUserdata", Position=4)]
+        [string]$read_ud_destination,
+
+        [Parameter(ParameterSetName="ReadVbi")]
+        [switch]$read_vbi,
+
+        [Parameter(ParameterSetName="ReadVbi", Position=1)]
+        [string]$read_vbi_src,
+
+        [Parameter(ParameterSetName="ReadVbi", Position=2)]
+        [string]$read_vbi_destination,
     )
 
     # Check if no parameters are provided
@@ -89,6 +114,16 @@ function xcrdutil {
         $flagsUint = [uint32]::Parse($flags)
         Write-Host "-enum: $xcrdIdUint $enum_rel_path $flagsUint"
         $xcrd.EnumBlobs($xcrdIdUint, $enum_rel_path, $flagsUint)
+    }
+    elseif ($read_ud) {
+        $udOffset = [uint64]::Parse($read_ud_offset)
+        $udLength = [int32]::Parse($read_ud_length)
+        Write-Host "-read_ud: $read_ud_src $udOffset $udLength $read_ud_destination"
+        $xcrd.ReadUserdata($read_ud_src, $udOffset, $udLength, $read_ud_destination)
+    }
+    elseif ($read_vbi) {
+        Write-Host "-read_vbi: $read_vbi_src $read_vbi_dst"
+        $xcrd.ReadVbi($read_vbi_src, $read_vbi_dst)
     }
 }
 

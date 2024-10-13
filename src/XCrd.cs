@@ -48,7 +48,7 @@ public static class XCrd
     public static extern uint XCrdQueryDevicePath([MarshalAs(UnmanagedType.LPWStr)] out string devicePath, IntPtr hDeviceHandle);
 
     [DllImport("xcrdapi.dll", PreserveSig = false)]
-    public static extern uint XCrdReadUserDataXVD(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string srcPath, ulong offset, out IntPtr buffer, ref uint length);
+    public static extern uint XCrdReadUserDataXVD(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string srcPath, ulong offset, IntPtr buffer, ref uint length);
 
     [DllImport("xcrdapi.dll", PreserveSig = false)]
     public static extern uint XCrdStorageReadBlob(IntPtr hAdapter, [MarshalAs(UnmanagedType.LPWStr)] string srcPath, IntPtr buf, ref uint readSize);
@@ -484,6 +484,103 @@ public class XCrdManager : IDisposable
         }
 
         return infoBuffer;
+    }
+
+    public uint ReadUserdata(string srcPath, ulong offset, int length, string dstPath)
+    {
+        IntPtr buf = Marshal.AllocHGlobal(length);
+        if (buf == IntPtr.Zero)
+        {
+            Console.WriteLine("Failed to allocate buffer");
+            return 1;
+        }
+
+        uint readLen = (uint)length;
+        uint result = XCrd.XCrdReadUserDataXVD(_adapterHandle, srcPath, offset, buf, ref readLen);
+        if (result != 0)
+        {
+            Console.WriteLine("Failed to read userdata: " + result.ToString());
+            Marshal.FreeHGlobal(buf);
+            return result;
+        }
+        else if (readLen != length) {
+            Console.WriteLine("Mismatch: expected " + length + " bytes, got " + readLen + " bytes");
+        }
+
+        byte[] byteBuffer = new byte[readLen];
+        Marshal.Copy(buf, byteBuffer, 0, (int)readLen);
+        File.WriteAllBytes(dstPath, byteBuffer);
+
+        Marshal.FreeHGlobal(buf);
+        return 0;
+    }
+
+    /*
+    Reads VBI file from System XVD
+
+    Src paths to try:
+
+    - F:\system.xvd
+    - R:\A\system.xvd or [XSU:]\A\system.xvd
+    - R:\B\system.xvd or [XSU:]\B\system.xvd
+
+    */
+    public uint ReadVbi(string srcPath, string dstPath)
+    {
+        byte[] lenBuf = new byte[0x10];
+        IntPtr lenBufPtr = Marshal.AllocHGlobal(lenBuf.Length);
+        if (lenBufPtr == IntPtr.Zero)
+        {
+            Console.WriteLine("Failed to allocate len-buffer");
+            return 1;
+        }
+
+        // Read first 0x10 bytes from header (offset 0x8 SizeOfHeaders, offset 0xC ImageSize)
+        uint readLen = (uint)lenBuf.Length;
+        uint result = XCrd.XCrdReadUserDataXVD(_adapterHandle, srcPath, 0, lenBufPtr, ref readLen);
+        if (result != 0 || readLen != lenBuf.Length)
+        {
+            Console.WriteLine($"Failed to read userdata header: {result} readLen: {readLen}");
+            Marshal.FreeHGlobal(lenBufPtr);
+            return result;
+        }
+
+        // Copy header bytes to managed memory
+        Marshal.Copy(lenBufPtr, lenBuf, 0, lenBuf.Length);
+
+        // Read sizes from header
+        uint size = BitConverter.ToUInt32(lenBuf, 0x8); // SizeOfHeader
+        size += BitConverter.ToUInt32(lenBuf, 0xC); // ImageSize
+
+        Console.WriteLine($"Full VBI Size: {size} bytes");
+
+        // Read final VBI
+        byte[] vbiBuf = new byte[size];
+        IntPtr vbiBufPtr = Marshal.AllocHGlobal((int)size);
+        if (vbiBufPtr == IntPtr.Zero)
+        {
+            Console.WriteLine("Failed to allocate vbi-buffer");
+            return 1;
+        }
+
+        readLen = size;
+        result = XCrd.XCrdReadUserDataXVD(_adapterHandle, srcPath, 0, vbiBufPtr, ref readLen);
+        if (result != 0 || readLen != size)
+        {
+            Console.WriteLine($"Failed to read userdata (3): {result} readLen: {readLen}");
+            Marshal.FreeHGlobal(lenBufPtr);
+            Marshal.FreeHGlobal(vbiBufPtr);
+            return result;
+        }
+
+        Marshal.Copy(vbiBufPtr, vbiBuf, 0, (int)readLen);
+
+        File.WriteAllBytes(dstPath, vbiBuf);
+
+        Marshal.FreeHGlobal(lenBufPtr);
+        Marshal.FreeHGlobal(vbiBufPtr);
+
+        return result;
     }
 
     public uint EnumBlobs(uint xcrdId, string path, uint flags)
