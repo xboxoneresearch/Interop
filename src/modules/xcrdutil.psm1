@@ -56,7 +56,7 @@ function xcrdutil {
         [string]$enum_rel_path,
 
         [Parameter(ParameterSetName="Enum", Position=3)]
-        [string]$flags
+        [string]$flags,
 
         [Parameter(ParameterSetName="ReadUserdata")]
         [switch]$read_ud,
@@ -80,7 +80,7 @@ function xcrdutil {
         [string]$read_vbi_src,
 
         [Parameter(ParameterSetName="ReadVbi", Position=2)]
-        [string]$read_vbi_destination,
+        [string]$read_vbi_destination
     )
 
     # Check if no parameters are provided
