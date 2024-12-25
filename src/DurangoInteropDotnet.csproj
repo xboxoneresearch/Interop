@@ -1,10 +1,78 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>disable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Update="examples\list_licenses\launch.xml">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+	<ItemGroup>
+		<ConcatFiles Include="00_GlobalUsings.cs;01_Interop.cs;AppPackageMountManager.cs;FirewallManager.cs;LicenseManager.cs;Shellcode.cs;UserManager.cs;WinUserManager.cs;XCrd.cs">
+			<Destination>aio.cs</Destination>
+		</ConcatFiles>
+		<ConcatFiles Include="00_GlobalUsings.cs;01_Interop.cs;XCrd.cs">
+			<Destination>xcrd.cs</Destination>
+		</ConcatFiles>
+		<ConcatFiles Include="00_GlobalUsings.cs;01_Interop.cs;LicenseManager.cs">
+			<Destination>license.cs</Destination>
+		</ConcatFiles>
+		<ConcatFiles Include="00_GlobalUsings.cs;01_Interop.cs;UserManager.cs">
+			<Destination>usermanager.cs</Destination>
+		</ConcatFiles>
+		<ConcatFiles Include="00_GlobalUsings.cs;01_Interop.cs;AppPackageMountManager.cs">
+			<Destination>packagemount.cs</Destination>
+		</ConcatFiles>
+		<ConcatFiles Include="00_GlobalUsings.cs;01_Interop.cs;WinUserManager.cs">
+			<Destination>winuser.cs</Destination>
+		</ConcatFiles>
+		<ConcatFiles Include="00_GlobalUsings.cs;01_Interop.cs;Shellcode.cs">
+			<Destination>sc.cs</Destination>
+		</ConcatFiles>
+		<ConcatFiles Include="modules/xcrdutil.psm1">
+			<Destination>xcrdutil.psm1</Destination>
+		</ConcatFiles>
+	</ItemGroup>
+
+	<Target Name="GenerateConcatenatedFiles" AfterTargets="Build" Inputs="@(ConcatFiles)" Outputs="%(Destination)\ignore.txt">
+		<ConcatenateSourceTask
+            OutputDirectory = "$(OutputPath)pwsh"
+            InputFiles = "@(ConcatFiles)"
+            OutputFile = "%(Destination)"/>
+	</Target>
+
+	<UsingTask
+      TaskName="ConcatenateSourceTask"
+      TaskFactory="RoslynCodeTaskFactory"
+      AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll" >
+		<ParameterGroup>
+			<InputFiles ParameterType="System.String[]" Required="true" />
+			<OutputFile ParameterType="System.String" Required="false" />
+			<OutputDirectory ParameterType="System.String" Required="false" />
+		</ParameterGroup>
+		<Task>
+			<Using Namespace="System" />
+			<Using Namespace="System.IO" />
+			<Code Type="Fragment" Language="cs">
+				<![CDATA[
+var outputPath = Path.Combine(OutputDirectory, OutputFile);
+Console.WriteLine($"Writing to {outputPath}");
+Directory.CreateDirectory(OutputDirectory);
+using (StreamWriter writer = new StreamWriter(outputPath, false, Encoding.UTF8)) {
+		foreach(var filePath in InputFiles){
+			var contents = File.ReadAllText(filePath, Encoding.UTF8);
+            writer.Write(contents);
+		}
+}
+				]]>
+			</Code>
+		</Task>
+	</UsingTask>
+	
 </Project>

@@ -48,7 +48,7 @@ OR
 
 #### General
 
-Use script `genAio.sh` (Linux) or `genAIO.bat` (Windows) to generate self-contained c# code snippets.
+Build this package (via msbuild) to generate self-contained C# code snippets in the build outputs `pwsh` directory.
 
 Then, on console in powershell, do `Add-Type -Path filename.cs`
 
