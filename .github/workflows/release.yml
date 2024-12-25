@@ -1,0 +1,31 @@
+name: Create Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+    contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v2
+      with:
+        msbuild-architecture: x64
+    - name: Build
+      run: msbuild src\DurangoInteropDotnet.csproj -property:Configuration=Release
+    - name: Create Release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        tag: ${{ github.ref_name }}
+      run: |
+        gh release create "$tag" \
+            --repo="$GITHUB_REPOSITORY" \
+            --title="${tag#v}" \
+            --generate-notes
