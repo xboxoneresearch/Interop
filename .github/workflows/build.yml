@@ -9,6 +9,12 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+    - name: Setup .NET SDK 8.0
+      uses: actions/setup-dotnet@v2
+      env:
+        GITHUB_TOKEN: ${{ secrets.ACTIONS_TOKEN }}
+      with:
+        dotnet-version: 8.0.x
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v2
       with:
