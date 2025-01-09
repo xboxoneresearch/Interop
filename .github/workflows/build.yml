@@ -2,6 +2,7 @@ name: Build
 on:
   push:
   pull_request:
+  workflow_call:
 
 jobs:
   build:
@@ -15,3 +16,9 @@ jobs:
         dotnet-version: 8.0.x
     - name: Build
       run: dotnet build src\DurangoInteropDotnet.csproj -property:Configuration=Release
+    - name: Upload artifacts
+      id: upload-artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: win-release-artifacts
+        path: src/bin/Release/net8.0-windows/**

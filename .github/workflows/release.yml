@@ -9,27 +9,26 @@ permissions:
     contents: write
 
 jobs:
+  build_workflow:
+    uses: ./.github/workflows/build.yml
+
   release:
     runs-on: windows-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
-    - name: Setup .NET SDK 8.0
-      uses: actions/setup-dotnet@v2
+    - uses: actions/download-artifact@v4
       with:
-        dotnet-version: 8.0.x
-    - name: Build
-      run: dotnet build src\DurangoInteropDotnet.csproj -property:Configuration=Release
+        name: win-release-artifacts
+    - name: List files
+      run: ls -R .
     - name: Package
       shell: bash
       run: |
-        cd src/bin/Release/net8.0-windows
         7z a -tzip "DurangoInterop_${{github.ref_name}}.zip" "*"
     - name: Create Release
       uses: softprops/action-gh-release@v2
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
-        files: "src/bin/Release/net8.0-windows/DurangoInterop_${{github.ref_name}}.zip"
+        files: "DurangoInterop_${{github.ref_name}}.zip"
         make_latest: true
         generate_release_notes: true
         fail_on_unmatched_files: true
