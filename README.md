@@ -73,6 +73,12 @@ $xcrd.Mount("[XTE:]\ConnectedStorage-retail")
 # [+] Successfully mounted XVD!
 # [+] Mount Path: \\?\GLOBALROOT\Device\Harddisk15\Partition1
 cmd /c mklink /j T:\connectedStorage "\\?\GLOBALROOT\Device\Harddisk15\Partition1\"
+
+# Read VBI
+$xcrd.ReadVbi("R:\A\system.xvd", "T:\system.vbi")
+# Alternatively, try these paths:
+# $xcrd.ReadVbi("R:\B\system.xvd", "T:\system.vbi")
+# $xcrd.ReadVbi("F:\system.xvd", "T:\system.vbi")
 ```
 
 XcrdUtil
