@@ -48,15 +48,27 @@ OR
 
 #### General
 
-Build this package (via msbuild) to generate self-contained C# code snippets in the build outputs `pwsh` directory.
+Build this package (via msbuild) to generate self-contained C# code snippets in the build outputs `pwsh` directory + compiled .NET assembly.
 
-Then, on console in powershell, do `Add-Type -Path filename.cs`
+There are two ways to utilize it, by source code or by loading the .NET assembly (from bytes!).
 
 ~~NOTE: This currently does not work on 2024 Retail OS exploited consoles.~~
 
 For OS ~2024 use SharpShell, linked above!
 
-## Example usage with powershell
+#### Example usage by loading the compiled .NET Assembly
+
+The following snippet is executed via Powershell.
+Given `DurangoInteropDotnet.dll` is located in the root of Volume `D:\`.
+
+```powershell
+$bytes = [System.IO.File]::ReadAllBytes("D:\\DurangoInteropDotnet.dll")
+$assembly = [System.Reflection.Assembly]::Load($bytes)
+
+[LicenseManager]::LoadLicenseFile("O:\\Licenses\\License0.xml")
+```
+
+#### Example usage with powershell by loading CSharp source files
 
 Important: Do the "compiling" genAio step first, to yield the standalone/ready to use *.cs files!
 
