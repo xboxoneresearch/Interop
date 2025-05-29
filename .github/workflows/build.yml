@@ -23,6 +23,10 @@ jobs:
         dotnet-version: 8.0.x
     - name: Build
       run: dotnet build src\DurangoInteropDotnet.csproj -property:Configuration=Release
+    - name: Copy README and LICENSE
+      run: |
+        copy README.md src\bin\Release\net8.0-windows\
+        copy LICENSE src\bin\Release\net8.0-windows\
     - name: Upload artifacts
       id: upload-artifact
       uses: actions/upload-artifact@v4
@@ -40,15 +44,15 @@ jobs:
         name: win-release-artifacts
     - name: List files
       run: ls -R .
-    # - name: Package
-    #   shell: bash
-    #   run: |
-    #     7z a -tzip "DurangoInterop_${{github.ref_name}}.zip" "*"
-    # - name: Create Release
-    #   uses: softprops/action-gh-release@v2
-    #   with:
-    #     token: ${{ secrets.GITHUB_TOKEN }}
-    #     files: "DurangoInterop_${{github.ref_name}}.zip"
-    #     make_latest: true
-    #     generate_release_notes: true
-    #     fail_on_unmatched_files: true
+    - name: Package
+      shell: bash
+      run: |
+        7z a -tzip "DurangoInterop_${{ github.ref_name }}.zip" "*"
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        files: "DurangoInterop_${{ github.ref_name }}.zip"
+        make_latest: true
+        generate_release_notes: true
+        fail_on_unmatched_files: true

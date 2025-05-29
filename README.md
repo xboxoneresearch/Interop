@@ -1,3 +1,7 @@
+[![CI](https://github.com/xboxoneresearch/Interop/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/xboxoneresearch/Interop/actions/workflows/build.yml)
+![GitHub Downloads (all assets, latest release)](https://img.shields.io/github/downloads/xboxoneresearch/Interop/latest/total)
+[![GitHub latest Tag](https://img.shields.io/github/v/tag/xboxoneresearch/Interop)](https://github.com/xboxoneresearch/Interop/releases/latest)
+
 # Durango Interop Dotnet
 
 This repo serves two purposes
@@ -5,6 +9,7 @@ This repo serves two purposes
 - Full C# classes to interop
 - MSBuild tasks that can be ran via dotnet
 
+[Download latest binaries](https://github.com/xboxoneresearch/Interop/releases/latest)
 
 ### Dotnet MSBuild tasks
 
